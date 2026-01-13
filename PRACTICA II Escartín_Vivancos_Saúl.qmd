@@ -1,0 +1,181 @@
+---
+title: "Visualización del mercado de videojuegos en Steam"
+format: html
+editor: visual
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(data.table)
+```
+
+```{r}
+steam <- fread("games_march2025_cleaned.csv")
+```
+
+```{r}
+games_per_year <- steam %>% mutate(year = lubridate::year(release_date)) %>% count(year) %>% filter(year >= 2005, year < 2025)
+```
+
+## Evolución de los lanzamientos en Steam
+
+Se observa un crecimiento muy acusado a partir de 2015, lo que coincide con la expansión del desarrollo independiente y la consolidación de Steam como plataforma dominante.
+
+```{r}
+ggplot(games_per_year, aes(x = year, y = n)) +
+  geom_line(color = "steelblue", linewidth = 1) +
+  geom_point(color = "steelblue") +
+  labs(
+    title = "Evolución de los lanzamientos de videojuegos en Steam",
+    subtitle = "Número de juegos publicados por año",
+    x = "Año",
+    y = "Número de lanzamientos"
+  ) +
+  theme_minimal()
+```
+
+El predominio del género indie indica una baja barrera de entrada y una fuerte presencia de desarrolladores pequeños.
+
+```{r}
+genres_clean <- steam %>%
+  select(genres) %>%
+  filter(!is.na(genres)) %>%
+  mutate(
+    genres = str_remove_all(genres, "\\[|\\]|'")
+  )
+```
+
+```{r}
+genres_count <- genres_clean %>%
+  separate_rows(genres, sep = ", ") %>%
+  count(genres, sort = TRUE)
+```
+
+```{r}
+top_genres <- genres_count %>%
+  slice_max(n, n = 10)
+
+ggplot(top_genres, aes(x = reorder(genres, n), y = n)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "Géneros más frecuentes en Steam",
+    subtitle = "Top 10 por número de videojuegos",
+    x = "Género",
+    y = "Número de juegos"
+  ) +
+  theme_minimal()
+```
+
+Los géneros indie y casual presentan precios más bajos, mientras que RPG y estrategia muestran mayor dispersión.
+
+```{r}
+price_genres <- steam %>%
+  select(genres, price) %>%
+  filter(!is.na(genres), !is.na(price), price <= 60) %>%
+  mutate(
+    genres = str_remove_all(genres, "\\[|\\]|'")
+  ) %>%
+  separate_rows(genres, sep = ", ") %>%
+  filter(genres %in% top_genres$genres)
+
+ggplot(price_genres, aes(x = genres, y = price)) +
+  geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.alpha = 0.2) +
+  coord_flip() +
+  labs(
+    title = "Distribución de precios por género",
+    subtitle = "Comparación entre los géneros más frecuentes en Steam",
+    x = "Género",
+    y = "Precio (€)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+steam_genres <- steam %>%
+  select(genres, pct_pos_total) %>%
+  filter(!is.na(genres), !is.na(pct_pos_total)) %>%
+  mutate(
+    genres = str_remove_all(genres, "\\[|\\]|'")
+  ) %>%
+  separate_rows(genres, sep = ", ")
+```
+
+```{r}
+top_genres_names <- top_genres$genres
+
+steam_genres_top <- steam_genres %>%
+  filter(genres %in% top_genres_names)
+```
+
+```{r}
+ggplot(steam_genres_top, aes(x = genres, y = pct_pos_total)) +
+  geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.alpha = 0.2) +
+  coord_flip() +
+  labs(
+    title = "Valoraciones de los videojuegos por género",
+    subtitle = "Porcentaje de reseñas positivas",
+    x = "Género",
+    y = "% de reseñas positivas"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+scatter_data <- steam %>%
+  select(price, pct_pos_total) %>%
+  filter(
+    !is.na(price),
+    !is.na(pct_pos_total),
+    price >= 0,
+    price <= 60   # cap visual razonable
+  )
+```
+
+```{r}
+ggplot(scatter_data, aes(x = price, y = pct_pos_total)) +
+  geom_point(alpha = 0.25) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    title = "Relación entre precio y valoración de los videojuegos en Steam",
+    subtitle = "Línea de tendencia para facilitar la interpretación",
+    x = "Precio (€)",
+    y = "% de reseñas positivas"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+popularity_data <- steam %>%
+  select(num_reviews_total, pct_pos_total) %>%
+  filter(
+    !is.na(num_reviews_total),
+    !is.na(pct_pos_total),
+    num_reviews_total > 10
+  )
+
+ggplot(popularity_data,
+       aes(x = num_reviews_total, y = pct_pos_total)) +
+  geom_point(alpha = 0.2) +
+  scale_x_log10() +
+  geom_hline(yintercept = 90, linetype = "dashed") +
+  labs(
+    title = "Popularidad vs valoración de los videojuegos",
+    subtitle = "Línea discontinua: juegos con >90% de reseñas positivas",
+    x = "Número de reseñas (log)",
+    y = "% de reseñas positivas"
+  ) +
+  theme_minimal()
+```
+
+```{}
+```
